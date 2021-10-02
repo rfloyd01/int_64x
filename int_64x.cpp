@@ -41,7 +41,9 @@ int_64x::int_64x(unsigned long long number, int left_shift)
 	if (number >> 63) digits.push_back(0);
 
 	//This constructor can also be useful during the multiplication process. If a value is given to left shift
-	//then the int_64x type will be left shifted by that amount upon creation.
+	//then the int_64x type will be left shifted by that amount upon creation. Caution should be used when 
+	//initializing via left shift on a negative number. This is allowable, however, it will be casted to a positive
+	//value (left shifting an already initialized negative number works just fine).
 	*this <<= left_shift;
 }
 int_64x::int_64x(std::string number)
@@ -78,7 +80,7 @@ int_64x::int_64x(std::string number)
 	}
 
 	//all arrays in this algorithm are backwards, i.e. given a string of "12345" an array of [5, 4, 3, 2, 1] will be created
-	int* base_ten  = new int[number.length() + 1]();
+	int* base_ten = new int[number.length() + 1]();
 	int* two_power = new int[number.length() + 1](); //at most two_power will need to be one digit longer than base_ten
 	two_power[0] = 1; //start with 2^0 = 1
 
@@ -242,7 +244,7 @@ int_64x& int_64x::operator+=(const int_64x& num)
 	{
 		//the original numbers had different polarities, we need to either remove a word(s) or keep the answer the same. We only need to remove a
 		//redundant word if the most significant word is 0 or 0xFFFFFFFFFFFFFFFF.
-		
+
 		//we need to remove the most significant word under two conditions. First, the length of *this is greater than 1
 		//and second, the polarity of the most significant word matches that of the second most significant word
 		int start = this->digits.size() - 1;
@@ -314,7 +316,7 @@ int_64x& int_64x::operator-=(const int_64x& num)
 
 		//Then subtract the two numbers. If *this.digits[i] ends up increasing after the subtraction we know that overflow has occurred.
 		this_temp -= num_temp;
-		if ( this_temp > this->digits[i]) carry = 1;
+		if (this_temp > this->digits[i]) carry = 1;
 		this->digits[i] = this_temp;
 	}
 
@@ -431,7 +433,7 @@ int_64x& int_64x::operator*=(const int_64x& num)
 			num_copy[k] = 0;
 			k++;
 		}
-		
+
 		num_copy[k] += 1;
 		negative[1] = true;
 	}
@@ -520,7 +522,7 @@ void int_64x::FastMultiplication(const int_64x& num)
 
 	//if *this or num are negative flip them and keep track of it
 	bool negative[2] = { false, false };
-	
+
 	if (this->digits.back() >> 63)
 	{
 		int k = this->digits.size() - 1;
@@ -549,7 +551,7 @@ void int_64x::FastMultiplication(const int_64x& num)
 		num_copy[k] += 1;
 		negative[1] = true;
 	}
-	
+
 	//we need to resize *this so that the multiplication will fit into it, the new size will be equal to the number of 64-bit words in
 	//*this added to the number of 64-bit words in num
 	int start = this->digits.size() - 1;
@@ -581,7 +583,7 @@ void int_64x::FastMultiplication(const int_64x& num)
 			unsignedAddition(ans, z0, 100, i + j);
 		}
 	}
-	
+
 	//if *this or num was negative, but not both, then ans needs to be inverted to a negative number
 	if (negative[0] ^ negative[1])
 	{
@@ -633,6 +635,19 @@ int_64x& int_64x::operator/=(const int_64x& num)
 	//in order to keep num as a const value a copy of it is made and operated on.
 	int_64x num_copy = num;
 
+	//check to see if either number is negative, if so flip it to a positive number
+	bool flipped[2] = { false, false };
+	if (this->digits.back() & 0x8000000000000000)
+	{
+		twosComplement(*this); //make a flipped copy of *this
+		flipped[0] = true;
+	}
+	if (num_copy.digits.back() & 0x8000000000000000)
+	{
+		twosComplement(num_copy); //make a flipped copy of num
+		flipped[1] = true;
+	}
+
 	std::vector<int> hits;
 	if (num_copy == 0)
 	{
@@ -648,18 +663,6 @@ int_64x& int_64x::operator/=(const int_64x& num)
 	}
 
 	//no need to copy num, it is going to be left shifted a decent amount, but then right shifted back to it's original position
-
-	bool flipped[2] = { false, false };
-	if (this->digits.back() & 0x8000000000000000)
-	{
-		twosComplement(*this); //make a flipped copy of *this
-		flipped[0] = true;
-	}
-	if (num_copy.digits.back() & 0x8000000000000000)
-	{
-		twosComplement(num_copy); //make a flipped copy of num
-		flipped[1] = true;
-	}
 
 	long long lead_bit_one = GetLeadBitLocation(*this), lead_bit_two = GetLeadBitLocation(num_copy);
 	long long shift = lead_bit_one - lead_bit_two;
@@ -730,7 +733,7 @@ int_64x& int_64x::operator/=(const int_64x& num)
 
 	return *this;
 }
-int_64x operator/(const int_64x& num1, int_64x& num2)
+int_64x operator/(const int_64x& num1, const int_64x& num2)
 {
 	//define division using the already defined /= operator, create a copy of num1 inside this function instead of
 	//passing a copy to the function, this reduces the amount of total copies created by 1
@@ -902,7 +905,7 @@ int_64x& int_64x::operator |= (const int_64x& num)
 
 	//if *this is bigger than num there's no issue
 	for (int i = 0; i < num.digits.size(); i++) this->digits[i] |= num.digits[i];
-	
+
 	//one final thing to check for, if the *this has more words than num, and *this is positive while num is negative then
 	//all of the words that *this has beyong the length of num will need to be flipped negative. This is because the shorter
 	//negative number has implied (but not actually present) words that equal 0xFFFFFFFFFFFFFFFF so that it's length matches
@@ -919,7 +922,7 @@ int_64x& int_64x::operator |= (const int_64x& num)
 
 			//to get to this loop *this must have a length of at least 2, so the below shouldn't trigger a violation error
 			if (this->digits[i - 1] & 0x8000000000000000) break;
-			
+
 			this->digits[i] = 0xFFFFFFFFFFFFFFFF;
 		}
 
@@ -1005,7 +1008,7 @@ int_64x& int_64x::operator=(const int_64x& num)
 {
 	//check for mistaken self assignment
 	if (this == &num) return *this;
-	
+
 	this->digits = num.digits;
 	return *this;
 }
@@ -1024,6 +1027,9 @@ std::string int_64x::getNumberString()
 	//I can't really think of a good way to convert the current binary representation of the number to base 10 without doing a lot of addition.
 	//Because of this it won't be super efficient to print out a number, however, all mathematics can still happen in binary form so at least that
 	//will be quick. Most likely there won't be a need to print out hundreds of int_64x types at the same time.
+
+	//if the int_64x doesn't have any numbers saved in it then just return a zero
+	if (this->digits.size() == 0) return "0";
 
 	//first check to see if the number is negative, if so then print a negative symbol, then take the two's complement of the number and print that
 	std::string decimal = "";
@@ -1274,7 +1280,7 @@ int fastlog2(unsigned long long value)
 	value |= value >> 32;
 	return tab64[((uint64_t)((value - (value >> 1)) * 0x07EDD5E59A4E28C2)) >> 58] * (0xFFFFFFFFFFFFFFFF && value);
 }
-int GetLeadBitLocation(int_64x &num)
+int GetLeadBitLocation(int_64x& num)
 {
 	//returns the location of the lead bit of "num", for example the binary number 1001100110 would return 9
 	//this function is only intended to be used with positive int_64x types, however, it will work with negative
@@ -1336,7 +1342,7 @@ void int_64x::partialAddition(unsigned long long num, int word)
 	//Before:
 	//0000000000000000000000000000000000000000000000000000000000110000
 	//0011100100000000000000000000000000000000000000000000000000000000
-    //0000000000000000000000000000000000000000000000000000000000000000
+	//0000000000000000000000000000000000000000000000000000000000000000
 	//
 	//After:
 	//0000000000000000000000000000000000000000000000000000000000110000
@@ -1383,5 +1389,5 @@ void int_64x::zero()
 {
 	//turns *this into the number 0
 	this->digits.clear();
-	this->digits[0] = 0;
+	this->digits.push_back(0);
 }
