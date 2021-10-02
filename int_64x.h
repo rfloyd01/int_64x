@@ -24,9 +24,9 @@
 //would be represented as [0x0000000000000001], [0x0000000000000000]).
 
 //TODO:
-//1. The division operator needs to be optimized (haven't attempted this yet so there should be some low hanging fruit here).
+//1. Division and modular division need to throw exceptions when division by 0 occurs
 //2. >>= operator needs to have the same logic as the <<= operator
-//3. Need to add boolean AND, NOT and XOR operators
+//3. Need to add bitwise NOT and XOR operators
 //4. String initialization and printing need to be optimized
 //5. Add versions of each operator that work directly on unsigned longs, should be quicker than converting to int_64x
 
@@ -82,7 +82,9 @@ public:
 
 	//Division Operators
 	int_64x& operator/=(const int_64x& num); //TODO: This operator hasn't yet been optimized, come back at some point and spend some time on this
-	friend int_64x operator/(const int_64x& num1, int_64x& num2);
+	friend int_64x operator/(const int_64x& num1, const int_64x& num2);
+	int_64x& operator%=(const int_64x& num);
+	friend int_64x operator%(const int_64x& num1, const int_64x& num2);
 
 	//BINARY OPERATORS
 	//Left Shift Operators
@@ -97,7 +99,9 @@ public:
 	int_64x& operator |= (const int_64x& num);
 	friend int_64x operator|(const int_64x& num1, const int_64x& num2);
 
-	//TODO: add AND operators
+	//AND operators
+	int_64x& operator &= (const int_64x& num);
+	friend int_64x operator&(const int_64x& num1, const int_64x& num2);
 
 	//BOOLEAN OPERATORS
 	friend bool operator==(const int_64x& num1, const int_64x& num2);
@@ -128,5 +132,5 @@ int GetLeadBitLocation(int_64x &num);
 void unsignedAddition(unsigned long long* num1, unsigned long long num2, int num1_size, int word);
 
 //Printing Functions
-std::ostream& operator<<(std::ostream& os, int_64x& num);
+std::ostream& operator<<(std::ostream& os, const int_64x& num);
 void PrintBinary(int_64x num);
