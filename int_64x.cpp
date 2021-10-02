@@ -666,6 +666,7 @@ int_64x& int_64x::operator/=(const int_64x& num)
 	long long shift = lead_bit_one - lead_bit_two;
 	int lead_bit_two_start = lead_bit_two;
 
+
 	num_copy <<= shift; //start by shifting num as far as it can go
 	lead_bit_two += shift;
 
@@ -854,6 +855,36 @@ int_64x operator%(const int_64x& num1, const int_64x& num2)
 	return num1_copy;
 }
 
+//Increment Operators
+int_64x& int_64x::operator++()
+{
+	//the prefix ++ operator, like with built in types it will increase the value of *this by 1
+	*this += 1;
+	return *this;
+}
+int_64x int_64x::operator++(int)
+{
+	//the postfix ++ operator is defined in terms of the prefix ++ operator. A temporary variable is
+	//created of *this before it gets incremented and is what's returned from this function
+	int_64x temp = *this;
+	operator++();
+	return temp;
+}
+int_64x& int_64x::operator--()
+{
+	//the prefix -- operator, like with built in types it will decrease the value of *this by 1
+	*this -= 1;
+	return *this;
+}
+int_64x int_64x::operator--(int)
+{
+	//the postfix -- operator is defined in terms of the prefix -- operator. A temporary variable is
+	//created of *this before it gets decremented and is what's returned from this function
+	int_64x temp = *this;
+	operator--();
+	return temp;
+}
+
 //BINARY OPERATORS
 //Left Shift Operators
 int_64x& int_64x::operator<<=(const unsigned int left_shift)
@@ -867,12 +898,17 @@ int_64x& int_64x::operator<<=(const unsigned int left_shift)
 	if (!left_shift) return *this;
 
 	int new_words = ceil(left_shift / 64.0);
-	int shift_amount = left_shift % 64;
-	if (shift_amount == 0) shift_amount = 64; //equation below will set shift amount to 0 instead of 64, manually reset it here
+	unsigned long shift_amount = left_shift % 64;
 	unsigned long long polarity = this->digits.back() >> 63; //0 for positive and 1 for negative
 	int start = this->digits.size() - 1; //signifies where we start shifting
 
-	//add the appropriate amount of empty words to the front of *this
+	//if shifting by a factor of 64, just place the appropriate amount of empty words at the front of the number and return,
+	//otherwise add words at the end of the number and perform the shift
+	if (shift_amount == 0)
+	{
+		for (int i = 0; i < new_words; i++) this->digits.insert(this->digits.begin(), 0);
+		return *this;
+	}
 	for (int i = 0; i < new_words; i++) this->digits.push_back(0);
 
 	//now shift all of the bits
