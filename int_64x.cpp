@@ -662,8 +662,6 @@ int_64x& int_64x::operator/=(const int_64x& num)
 		return(*this);
 	}
 
-	//no need to copy num, it is going to be left shifted a decent amount, but then right shifted back to it's original position
-
 	long long lead_bit_one = GetLeadBitLocation(*this), lead_bit_two = GetLeadBitLocation(num_copy);
 	long long shift = lead_bit_one - lead_bit_two;
 	int lead_bit_two_start = lead_bit_two;
@@ -739,6 +737,120 @@ int_64x operator/(const int_64x& num1, const int_64x& num2)
 	//passing a copy to the function, this reduces the amount of total copies created by 1
 	int_64x num1_copy = num1;
 	num1_copy /= num2;
+	return num1_copy;
+}
+int_64x& int_64x::operator%=(const int_64x& num)
+{
+	//I'm sure there's a better way to do this but for now, just use the same algorithm as division. Once the
+	//division value is obtained, multiply it by "num" and return *this minus that multiplication. This should
+	//work regardless of negative numbers, or if *this is smaller than num.
+
+	//Everything between these lines is directly copied from the /= operator with the exception that functionality
+	//between dividing by 1 and a number bigger than this have been switched.
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+	int_64x num_copy = num, this_copy = *this; //the actual division is applied to a copy of *this instead of *this itself
+
+	//check to see if either number is negative, if so flip it to a positive number
+	bool flipped[2] = { false, false };
+	if (this_copy.digits.back() & 0x8000000000000000)
+	{
+		twosComplement(this_copy); //flip the copy of *this
+		flipped[0] = true;
+	}
+	if (num_copy.digits.back() & 0x8000000000000000)
+	{
+		twosComplement(num_copy); //make a flipped copy of num
+		flipped[1] = true;
+	}
+
+	std::vector<int> hits;
+	if (num_copy == 0)
+	{
+		//TODO: Need to throw some kind of exception here that breaks the program
+		std::cout << "Division by 0 not possible." << std::endl;
+		return *this;
+	}
+	else if (num_copy == 1)
+	{
+		this->zero();
+		return(*this);
+	}
+	else if (num_copy > this_copy) return *this;
+
+	long long lead_bit_one = GetLeadBitLocation(this_copy), lead_bit_two = GetLeadBitLocation(num_copy);
+	long long shift = lead_bit_one - lead_bit_two;
+	int lead_bit_two_start = lead_bit_two;
+
+	num_copy <<= shift;
+	lead_bit_two += shift;
+
+	while (true)
+	{
+		if (num_copy > this_copy)
+		{
+			shift--;
+			num_copy >>= 1;
+			lead_bit_two--;
+		}
+
+		hits.push_back(shift);
+		this_copy -= num_copy;
+
+		lead_bit_one = GetLeadBitLocation(this_copy);
+		if (lead_bit_one <= lead_bit_two_start) break;
+
+		num_copy >>= (lead_bit_two - lead_bit_one);
+		shift -= (lead_bit_two - lead_bit_one);
+		lead_bit_two = lead_bit_one;
+	}
+
+	num_copy >>= (lead_bit_two - lead_bit_two_start);
+
+	if (num_copy <= this_copy)
+	{
+		this_copy -= num_copy;
+		hits.push_back(0);
+	}
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+	//The modular division function deviates slightly from standard division at this point
+
+	if (this_copy.digits.size() - 1 > (hits[0] / 64))
+	{
+		this_copy.digits.erase(this_copy.digits.begin() + (hits[0] / 64 + 1), this_copy.digits.end());
+	}
+	else if (this_copy.digits.size() - 1 < (hits[0] / 64))
+	{
+		int stop = (hits[0] / 64) - (this_copy.digits.size() - 1);
+		for (int i = 0; i < stop; i++) this_copy.digits.push_back(0);
+	}
+	for (int i = 0; i < this_copy.digits.size(); i++) this_copy.digits[i] = 0;
+
+	int word = 0;
+	for (int i = 0; i < hits.size(); i++)
+	{
+		word = hits[i] / 64;
+		this_copy.digits[word] |= ((unsigned long long)0x1 << (hits[i] % 64));
+	}
+
+	//we need to make sure that we haven't changed the polarity of the number by mistake. At this point both of the orignal numbers
+	//were turned into positive values so if the lead bit is now a 1 then we need to add an extra '0' word to the front.
+	if (this_copy.digits.back() & 0x8000000000000000) this_copy.digits.push_back(0);
+
+	//finally, we need to flip the polarity of the answer if only one of the inputs was negative
+	if (flipped[0] ^ flipped[1]) twosComplement(this_copy);
+
+	//The original division is complete, multiply the copy of *this by the original number we divided by to see how much less it is
+	//than *this. The difference between the two numbers is the answer to our modular division.
+	this_copy *= num;
+
+	return (*this -= this_copy);
+}
+int_64x operator%(const int_64x& num1, const int_64x& num2)
+{
+	//define modular division using the already defined %= operator, create a copy of num1 inside this function instead of
+	//passing a copy to the function, this reduces the amount of total copies created by 1
+	int_64x num1_copy = num1;
+	num1_copy %= num2;
 	return num1_copy;
 }
 
@@ -889,7 +1001,7 @@ int_64x operator>>(const int_64x& num, const unsigned int right_shift)
 	return num_copy;
 }
 
-//Or Operators
+//OR Operators
 int_64x& int_64x::operator |= (const int_64x& num)
 {
 	//The |= operator is actually straightforwards for once. Just carry out a normal | operation on every word. The only
@@ -937,6 +1049,66 @@ int_64x operator|(const int_64x& num1, const int_64x& num2)
 	//passing a copy to the function, this reduces the amount of total copies created by 1
 	int_64x num1_copy = num1;
 	num1_copy |= num2;
+	return num1_copy;
+}
+
+//AND Operators
+int_64x& int_64x::operator &= (const int_64x& num)
+{
+	//If *this has more words than num, and num is a positive number, then *this will need to be 
+	//shortened so that its length is the same as num. If *this has more words and num is a negative number,
+	//however, then the words beyond the length of num will remain unchanged. This is because num has implied
+	//words of all 1's in front of it. Conversely, if *this is shorter than num and *this is negative, it will
+	//get larger due to the implied 1's at its front.
+
+	//Final polarity of the operation is as shown below
+	//positive & positive = positive
+	//negative & negative = negative
+	//positive & negative = positive
+	bool final_polarity = (this->digits.back() >> 63) & (num.digits.back() >> 63);
+
+	if (num < 0)
+	{
+		//If num is a negative number then *this will either remain the same length or grow
+		int diff = num.digits.size() - this->digits.size(); //need an unchanging variable for our loop below
+		for (int i = 0; i < diff; i++) this->digits.push_back(0 - (this->digits.back() >> 63)); //if *this is shorter then it will have words added in this loop
+
+		//*this will either have more words, or the same amount of words as num, so loop using the number of words in num
+		for (int i = 0; i < num.digits.size(); i++) this->digits[i] &= num.digits[i];
+	}
+	else if (num > 0)
+	{
+		//if num is a positive number then *this will either remain the same length or shrink
+		int diff = this->digits.size() - num.digits.size(); //need an unchanging variable for our loop below
+		if (diff > 0) this->digits.erase(this->digits.end() - diff, this->digits.end()); //if *this is longer then it will have words removed here
+
+		//*this will either have less words, or the same amount of words as num, so loop using the number of words in num
+		for (int i = 0; i < this->digits.size(); i++) this->digits[i] &= num.digits[i];
+	}
+	else
+	{
+		//if num is 0 then the result of the & will just be 0
+		this->zero();
+		return *this;
+	}
+
+	//the & operation is complete, we just need to make sure that there aren't any redundant words at the front of the final number
+	for (int i = this->digits.size() - 1; i > 0; i--)
+	{
+		if ((this->digits[i] == 0) || (this->digits[i] == -1))
+		{
+			if ((this->digits[i] >> 63) == (this->digits[i - 1] >> 63)) this->digits.erase(this->digits.begin() + i);
+		}
+	}
+
+	return *this;
+}
+int_64x operator&(const int_64x& num1, const int_64x& num2)
+{
+	//define bitwise AND using the already defined &= operator, create a copy of num1 inside this function instead of
+	//passing a copy to the function, this reduces the amount of total copies created by 1
+	int_64x num1_copy = num1;
+	num1_copy &= num2;
 	return num1_copy;
 }
 
@@ -1014,9 +1186,10 @@ int_64x& int_64x::operator=(const int_64x& num)
 }
 
 //Printing Operations
-std::ostream& operator<<(std::ostream& os, int_64x& num)
+std::ostream& operator<<(std::ostream& os, const int_64x& num)
 {
-	std::string number_string = num.getNumberString();
+	int_64x num_copy = num;
+	std::string number_string = num_copy.getNumberString();
 	return os << number_string;
 }
 std::string int_64x::getNumberString()
@@ -1038,7 +1211,7 @@ std::string int_64x::getNumberString()
 		decimal += '-';
 		twosComplement(*this);
 		decimal += getNumberString();
-		twosComplement(*this); //flip back to a positive value
+		twosComplement(*this);
 		return decimal;
 	}
 
